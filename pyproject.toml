@@ -6,6 +6,7 @@ authors = ["tynguyen <tynguyen@seas.upenn.edu>"]
 
 [tool.poetry.dependencies]
 python = "^3.7"
+phue = "^1.1"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
