@@ -1,3 +1,69 @@
+import logging
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+
+HSV_THRESH_VALUES = {
+    "red": {
+        "h_low": -15,
+        "h_high": 30,
+        "s_low": 0.60,
+        "s_high": 1.0,
+        "cool_to_warm": True,
+    },
+    "orange": {
+        "h_low": 30,
+        "h_high": 45,
+        "s_low": 0.60,
+        "s_high": 1.0,
+        "cool_to_warm": True,
+    },
+    "yellow": {
+        "h_low": 45,
+        "h_high": 90,
+        "s_low": 0.60,
+        "s_high": 1.0,
+        "cool_to_warm": False,
+    },
+    "green": {
+        "h_low": 90,
+        "h_high": 150,
+        "s_low": 0.60,
+        "s_high": 1.0,
+        "cool_to_warm": False,
+    },
+    "cyan": {
+        "h_low": 150,
+        "h_high": 225,
+        "s_low": 0.60,
+        "s_high": 1.0,
+        "cool_to_warm": False,
+    },
+    "blue": {
+        "h_low": 225,  # 225. Add 20 to get very blue
+        "h_high": 270,  # 270. -10 to get very blue
+        "s_low": 0.60,
+        "s_high": 1.0,
+        "cool_to_warm": True,
+    },
+    "violet": {
+        "h_low": 270,
+        "h_high": 285,
+        "s_low": 0.60,
+        "s_high": 1.0,
+        "cool_to_warm": True,
+    },
+    "magenta": {
+        "h_low": 285,
+        "h_high": 345,
+        "s_low": 0.60,
+        "s_high": 1.0,
+        "cool_to_warm": True,
+    },
+}
+
+
 COLOR_RGB_MAP = {
     "black": (0, 0, 0),
     "white": (255, 255, 255),
@@ -52,6 +118,18 @@ MOOD_BOOSTING_COLOR_MAP = {
 }
 
 
+def str_to_rgb(color):
+    """
+    Convert string to RGB color.
+    """
+    if color in COLOR_RGB_MAP:
+        return COLOR_RGB_MAP[color]
+    else:
+        logger.debug(f"List of available colors: \n {COLOR_RGB_MAP.keys()}")
+        logging.debug(f"No valid color is chosen. Return 'white' by default.")
+        return COLOR_RGB_MAP["white"]
+
+
 def get_mood_color(mood):
     """
     Get appropriate color for mood based on the moode description
@@ -61,8 +139,8 @@ def get_mood_color(mood):
     if mood in MOOD_BOOSTING_COLOR_MAP:
         return MOOD_BOOSTING_COLOR_MAP[mood]
     else:
-        print(f"List of available moods: \n {MOOD_BOOSTING_COLOR_MAP.keys()}")
-        print(f"No valid color mood is chosen. Return 'encourage' by default.")
+        logging.debug(f"List of available moods: \n {MOOD_BOOSTING_COLOR_MAP.keys()}")
+        logging.debug(f"No valid color mood is chosen. Return 'encourage' by default.")
         return MOOD_BOOSTING_COLOR_MAP["encourage"]
 
 
@@ -94,9 +172,97 @@ def rgb_to_hsv(*rgb):
     else:
         s = df / mx
     v = mx
-    # Not good yet.
-    s = int(s * 100)
     return {"h": int(h), "s": s, "v": v}
+
+
+def hsv_to_rgb(*hsv):
+    """ Change HSV to RGB
+        @Args:
+            hsv: hue, saturation, value
+    """
+    if len(hsv) == 3:
+        h, s, v = hsv
+    elif len(hsv) == 1:
+        h, s, v = hsv[0]
+    h = h / 60.0
+    i = int(h)
+    f = h - i
+    p = v * (1 - s)
+    q = v * (1 - s * f)
+    t = v * (1 - s * (1 - f))
+    if i == 0:
+        r, g, b = v, t, p
+    elif i == 1:
+        r, g, b = q, v, p
+    elif i == 2:
+        r, g, b = p, v, t
+    elif i == 3:
+        r, g, b = p, q, v
+    elif i == 4:
+        r, g, b = t, p, v
+    elif i == 5:
+        r, g, b = v, p, q
+    return int(r * 255), int(g * 255), int(b * 255)
+
+
+def pick_hsv_color(
+    color: str, warmness_percentage: float = 1, brightness_percentage: float = 1
+):
+    """
+    Pick a color with warmness level from the HSV color space (H is the hue, S is the saturation, V is the value).
+    H in [0, 360], S in [0, 1], V in [0, 1]
+    @Args:
+        color: color name
+        warmness_percentage: percentage of warmness in [0, 1]
+        brightness_percentage: percentage of brightness in [0, 1]
+    """
+    if color not in HSV_THRESH_VALUES:
+        raise ValueError(f"No HSV threshold values for color {color}")
+    if warmness_percentage < 0 or warmness_percentage > 1:
+        raise ValueError(f"Warmness percentage should be in [0, 1]")
+
+    h_low = HSV_THRESH_VALUES[color]["h_low"]
+    h_high = HSV_THRESH_VALUES[color]["h_high"]
+    s_low = HSV_THRESH_VALUES[color]["s_low"]
+    s_high = HSV_THRESH_VALUES[color]["s_high"]
+    v_low = 0
+    v_high = 1
+
+    # Increase s_low by 0.1 to avoid white color
+    s_low += 0.1
+
+    # The warmness increases as the hue increases?
+    cool_to_warm = HSV_THRESH_VALUES[color]["cool_to_warm"]
+    if not cool_to_warm:
+        warmness_percentage = 1 - warmness_percentage
+
+    # Calculate v value
+    v = v_low + (v_high - v_low) * brightness_percentage
+
+    # Calculate h value
+    h = h_low + (h_high - h_low) * warmness_percentage
+    h = int(h + 360) % 360  # Make sure h is in [0, 360]
+
+    # Calculate s value
+    s = s_low + (s_high - s_low) * warmness_percentage
+    return [h, s, v]
+
+
+def pick_rgb_color_by_name(
+    color: str, warmness_percentage: float = 1, brightness_percentage: float = 1
+):
+    """
+    Pick a color with warmness level by name.
+    @Args:
+        color: color name
+        warmness_percentage: percentage of warmness in [0, 1]
+        brightness_percentage: percentage of brightness in [0, 1]
+    """
+    # Use the HSV color space to pick a color
+    hsv = pick_hsv_color(color, warmness_percentage, brightness_percentage)
+    # Convert HSV to RGB
+    rgb = hsv_to_rgb(*hsv)
+    return rgb
 
 
 def rgb_to_xy(*rgb):
